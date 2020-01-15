@@ -40,7 +40,7 @@ class PrintPNDFormWizard(models.TransientModel):
     )
     fiscalyear_id = fields.Many2one(
         'account.fiscalyear',
-        string='Fiscalyear',
+        string='Calendar Year',
         required=False,
     )
     print_format = fields.Selection(
