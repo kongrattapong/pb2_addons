@@ -4,7 +4,7 @@ from dateutil.relativedelta import relativedelta
 from openerp import models, api, fields, _
 from openerp import tools
 from openerp.tools.float_utils import float_compare
-from openerp.exceptions import ValidationError
+from openerp.exceptions import ValidationError, except_orm
 from openerp.addons.pabi_base.models.res_investment_structure \
     import CONSTRUCTION_PHASE
 from openerp.addons.document_status_history.models.document_history import \
@@ -475,6 +475,10 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
         string='Date Expansion',
         track_visibility='onchange',
     )
+    date_close = fields.Date(
+        string='Date Close',
+        track_visibility='onchange',
+    )
     contract_day_duration = fields.Integer(
         string='Contract Duration (days)',
         readonly=True,
@@ -571,7 +575,7 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
                 if period_ids.count(x) > 1:
                     raise ValidationError(
                         _('Duplicate period in budget plan!'))
-                    
+
             for expense in rec.monitor_expense_ids:
                 phase_summary = rec.summary_ids.filtered(lambda l: l.fiscalyear_id == expense.fiscalyear_id)
                 phase_consumed = rec.monitor_expense_ids.filtered(lambda l: l.fiscalyear_id == expense.fiscalyear_id)
@@ -708,8 +712,10 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
         else:
             date_start = datetime.strptime(self.date_start, '%Y-%m-%d').date()
             date_end = date_start + relativedelta(months=self.month_duration)
-            self.date_end = date_end.strftime('%Y-%m-%d')
-        self._prepare_phase_plan_line(self.date_start, self.date_end)
+            self.date_expansion = date_end.strftime('%Y-%m-%d')
+            if not self.date_end:
+                self.date_end = self.date_expansion
+        self._prepare_phase_plan_line(self.date_start, self.date_expansion)
 
     @api.onchange('contract_day_duration', 'contract_date_start',
                   'contract_date_end')
@@ -890,6 +896,12 @@ class RestInvestConstructionPhase(LogCommon, models.Model):
 
     @api.multi
     def action_delete(self):
+        for rec in self.monitor_expense_ids:
+            if rec.amount_consumed:
+                raise except_orm(
+                    _('Warning!'),
+                    _("If consumed amount already have values, "
+                      "Cannot delete ProjectC/Phase."))
         self.write({'state': 'delete'})
 
     @api.multi
